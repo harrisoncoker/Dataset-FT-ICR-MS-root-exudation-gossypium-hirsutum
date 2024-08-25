@@ -1,5 +1,5 @@
 ---
-title: "N manuscript"
+title: "Drought stimulates root exudation of organic nitrogen in cotton (Gossypium hirsutem)"
 author: "Harrison Coker"
 date: "2023-08-29"
 ---
