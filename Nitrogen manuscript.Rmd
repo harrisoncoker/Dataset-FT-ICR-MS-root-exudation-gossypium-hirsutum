@@ -1,0 +1,879 @@
+---
+title: "N manuscript"
+author: "Harrison Coker"
+date: "2023-08-29"
+---
+
+Loading packages
+```{r}
+  library(tidyverse)
+  library(vegan)
+  library(RColorBrewer)
+  library(readxl)
+  library(stats)
+```
+
+Setting working directory and loading metadata
+```{r}
+setwd("~/Desktop/R /N-exudation-methods")
+
+metadata <- read_excel("~/Desktop/R /N-exudation-methods/N_alldata.xlsx", 
+    sheet = "Metadata")
+
+### Change all metadata columns to factors to avoid problems at plotting
+for(i in 2:ncol(metadata)){
+  metadata[,i] <- factor(as_vector(metadata[,i])) 
+}
+
+metadata 
+
+```
+
+
+Total C and N and free amino acids statistical tests; two-sample t-tests with bootstrap replacement
+```{r}
+#reading data
+TCTON <- read_excel("~/Desktop/R /N-exudation-methods/N_alldata.xlsx", 
+    sheet = "TCTN_new")
+
+TCTON_summarised <- TCTON %>%
+  group_by(Day, Treatment) %>% 
+  summarise(TC = mean(TC_mg_L), 
+            SD = sd(TC_mg_L),
+            TN = mean(NO3_N), 
+            sd = sd(NO3_N))
+
+TCTON_summarised$Day <- as.factor(TCTON_summarised$Day)
+
+TC_graph <- ggplot(TCTON_summarised, aes(Day, TC, fill=Treatment))
+
+TC_graph + 
+  geom_col(position=position_dodge(), color="black") + 
+  theme_bw() + 
+  scale_fill_brewer(palette = "Dark2") +
+  geom_errorbar(aes(ymin=TC-SD, ymax=TC+SD), position=position_dodge(.9), width=0.4) +
+  labs(y = "Total C (mg/L)") +
+   theme(legend.title = element_text(size=14, face = "bold"),
+        legend.text = element_text(size=14, face = "bold"),
+        axis.text = element_text(size=14, face="bold"),
+        axis.title = element_text(size=14, face = "bold"))
+  
+
+TN_graph <- ggplot(TCTON_summarised, aes(Day, TN, fill=Treatment))
+
+TN_graph + 
+  geom_col(position=position_dodge()) + 
+  theme_bw() + 
+  geom_errorbar(aes(ymin=TN-sd, ymax=TN+sd), position=position_dodge(1), width=0.4)
+
+
+TN <- aov(TON_mod ~ Treatment*Day, data = TCTON)
+summary(TN)
+
+TNTC_root <- read_excel("~/Desktop/R /N-exudation-methods/N_alldata.xlsx", 
+    sheet = "TCTN")
+
+#statistical test of measured root exudate constituents
+set.seed(112399)
+TotalCN.test <- TNTC_root %>%
+  filter(Variable == "C_N" | Variable == "TOC_mass" | Variable == "TON_mass" | 
+         Variable == "Specific_C" | Variable == "Specific_N" | 
+         Variable == "Concentration_C" | Variable == "Concentration_N" | Variable == "Specific_NO3" |
+         Variable == "NO3_conc" | Variable == "NO3_mass" | Variable == "Specific_AA_total" | 
+         Variable == "Amino_conc" | Variable == "Amino_N") %>%
+  group_by(Variable, Phase) %>%
+  sample_n(size = 20, replace = T) %>%
+  t_test(Response ~ Treatment) %>%
+  adjust_pvalue(method = "BH") %>%
+  add_significance()
+
+TotalCN.test
+
+#Numerical summary of measured root exudate constituents
+set.seed(112399)
+TotalCN.summary <- TNTC_root %>%
+  filter(Variable == "C_N" | Variable == "TOC_mass" | Variable == "TON_mass" | 
+         Variable == "Specific_C" | Variable == "Specific_N" | 
+         Variable == "Concentration_C" | Variable == "Concentration_N" | Variable == "Specific_NO3" |
+         Variable == "NO3_conc" | Variable == "NO3_mass" | Variable == "Specific_AA_total" | 
+         Variable == "Amino_conc" | Variable == "Amino_N") %>%
+  group_by(Variable, Treatment, Phase) %>%
+  summarise(Avg = mean(Response), 
+            SD = sd(Response))
+
+TotalCN.summary
+
+
+##Amino acids statistical tests
+set.seed(9999)
+Amino.test <- TNTC_root %>%
+  filter(Amino == "Yes") %>%
+  filter(Variable == "Amino_conc" | Variable == "Amino_N" | Variable == "Specific_AA") %>%
+  group_by(Element, Phase, Variable2) %>%
+  sample_n(size = 20, replace = TRUE) %>%
+  wilcox_test(Response ~ Treatment) %>%
+  adjust_pvalue(method = "BH") %>%
+  add_significance()
+
+Amino.test
+
+
+
+#Amino acid-N
+set.seed(9999)
+Amino.massN.test <- TNTC_root %>%
+  filter(Amino == "Yes") %>%
+  filter(Variable == "Amino_N") %>%
+  #filter(Phase == "Treatment") %>%
+  group_by(Element, Phase) %>%
+  sample_n(size = 20, replace = TRUE) %>%
+  wilcox_test(Response ~ Treatment) %>%
+  adjust_pvalue(method = "BH") %>%
+  add_significance()
+
+Amino.massN.test
+
+
+
+
+
+#Numerical summary of amino acids for barplot
+#Concentration
+set.seed(112399)
+Amino.conc.acid.summary <- TNTC_root %>%
+  filter(Amino == "Yes") %>%
+  filter(Variable == "Amino_conc") %>%
+  group_by(Element, Treatment, Phase) %>%
+  sample_n(size = 30, replace = TRUE) %>%
+  summarise(Average = mean(Response), 
+            SE = sd(Response)/sqrt(5),
+            SD = sd(Response))
+Amino.conc.acid.summary
+
+Amino.conc.acid.summary$Phase <- factor(Amino.conc.acid.summary$Phase, levels = c("Treatment", "Recovery"))
+Amino.conc.acid.summary$Element <- factor(Amino.conc.acid.summary$Element, levels = c("ASN", "ASP", "SER", "GLU", "PRO", "TRP", "GLN", "HIS", "VAL", "THR", "ARG","ALA", "GLY", "ILE", "PHE", "LEU", "TYR", "LYS"))
+
+#plotting AA conc
+Amino.conc.acid.barplot <- ggplot(Amino.conc.acid.summary, aes(x=Element, y=Average, fill=Treatment))
+
+Amino.conc.acid.barplot + 
+  geom_col(position=position_dodge()) + 
+  geom_errorbar(aes(ymin=Average-SE, ymax=Average+SE), position=position_dodge(.9), width=0.4) +
+  facet_grid(rows="Phase", scales = "free") + 
+  theme_bw() + 
+  theme(legend.position="left") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) + 
+  scale_fill_brewer(palette="Dark2") + 
+  labs(x="Amino acid", y="Concentration (mg/L)", title="Free amino acid quantification") +
+  scale_y_continuous(n.breaks=3)
+
+
+
+
+
+#Numerical summary of amino acids for barplot
+#Amino acid-N
+set.seed(112399)
+Amino.massN.acid.summary <- TNTC_root %>%
+  filter(Amino == "Yes") %>%
+  filter(Variable == "Amino_N") %>%
+  group_by(Element, Treatment, Phase) %>%
+  sample_n(size = 20, replace = TRUE) %>%
+  summarise(Average = mean(Response), 
+            SD = sd(Response))
+Amino.massN.acid.summary
+
+Amino.massN.acid.summary$Phase <- factor(Amino.massN.acid.summary$Phase, levels = c("Treatment", "Recovery"))
+Amino.massN.acid.summary$Element <- factor(Amino.massN.acid.summary$Element, levels = c("ASN", "GLU", "PRO", "TRP", "SER","ASP", "GLN", "HIS", "VAL", "THR", "ARG","ALA", "GLY", "ILE", "PHE", "LEU", "TYR", "LYS"))
+
+#plotting amino acid-N
+Amino.massN.acid.barplot <- ggplot(Amino.massN.acid.summary, aes(x=Element, y=Average, fill=Treatment))
+
+Amino.massN.acid.barplot + 
+  geom_col(position=position_dodge()) + 
+  geom_errorbar(aes(ymin=Average-SD, ymax=Average+SD), position=position_dodge(.9), width=0.4) +
+  facet_grid(rows="Phase", scales = "free") + 
+  theme_bw() + 
+  theme(legend.position="left") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) + 
+  scale_fill_brewer(palette="Dark2") + 
+  labs(x="Amino acid", y="Amino acid-N (ug)", title="Free amino acid quantification") +
+  scale_y_continuous(n.breaks=10) + 
+  theme(axis.text = element_text(face="bold")) + 
+  theme(axis.text=element_text(size=10))
+
+
+
+#Creating barplot of root exudate N balance
+AA.N.mass.summary <- TNTC_root %>%
+  filter(Variable == "Amino_N") %>%
+  group_by(Phase, Treatment, Variable) %>%
+  summarise(Sum.mass = sum(Response)/5, 
+            SD = sd(Response))
+
+AA.N.mass.summary 
+
+
+
+#proportions stacked bar plot of quantified root exudate constuents
+AA.N.conc.summary <- TNTC_root %>%
+  filter(Variable == "Amino_conc") %>%
+  group_by(Phase, Treatment, Variable) %>%
+  summarise(Avg.conc = sum(Response)/5)
+AA.N.conc.summary 
+
+Other.N.conc <- TNTC_root %>%
+  filter(Element == "TN_conc") %>%
+  filter(!(Variable == "TOC_mass")) %>%
+  group_by(Phase, Treatment, Variable) %>%
+  summarise(Avg.conc = mean(Response))
+
+Other.N.conc
+
+All.N.conc <- rbind(AA.N.conc.summary, Other.N.conc)
+
+All.N.conc
+
+
+All.N.conc$Phase <- factor(All.N.conc$Phase, levels = c("Treatment", "Recovery"))
+All.N.conc$Variable <- factor(All.N.conc$Variable, levels = c("NO3_conc", "Amino_conc", "Concentration_N", "Concentration_C"), 
+                                                   labels = c("NO3", "Free amino acids", "Organic N", "Organic C"))
+
+
+#barchart of N-mass
+N_conc.barplot <- ggplot(All.N.conc, aes(x = Treatment, y = Avg.conc, fill = Variable))
+  
+N_conc.barplot +
+  geom_col(position = "fill", color = "black") + 
+  facet_grid(cols = vars(Phase)) + 
+  theme_bw() +
+  #scale_fill_brewer(palette = "YlGnBu") +
+  scale_fill_manual(values= wes_palette("Rushmore1", n = 4)) +
+  labs(x = "Treatment", y = "Proportions of root exudate constituents", fill = "N source") + 
+  scale_y_continuous(n.breaks = 12) + 
+  theme(axis.text = element_text(face="bold")) + 
+  theme(axis.text=element_text(size=14))
+
+
+
+
+```
+
+
+
+PERMANOVA of N metabolites by experimental phases
+```{r}
+#permanova of elemental types and molecular formula containg N compounds -- 
+#data is only peaks with N compounds. 
+## day 0 baseline
+matrix_baseline.file = read_excel("~/Desktop/R /N-exudation-methods/N_alldata.xlsx", 
+    sheet = "matrix_baseline") 
+
+matrix_baseline <- matrix_baseline.file %>%
+  column_to_rownames(var = "Mass") %>%
+  t()
+
+metadata_baseline <- metadata %>% filter(Phase == "Baseline")
+
+dim(matrix_baseline)
+dim(metadata_baseline)
+
+set.seed(321) #scale x to presence/absence (0/1) with bray-curtis dissimilarity
+dist_matrix_baseline <- vegdist(decostand(matrix_baseline, "pa"), method = "bray")
+
+set.seed(789)
+permanova_baseline <- adonis2(dist_matrix_baseline ~ Treatment,
+                             data=metadata_baseline,
+                             permutations=999,
+                             method="bray")
+view(permanova_baseline)
+
+
+
+##doing drydown days 2 -- 11
+matrix_drydown.file = read_excel("~/Desktop/R /N-exudation-methods/N_alldata.xlsx", 
+    sheet = "matrix_DD")
+
+matrix_drydown <- matrix_drydown.file %>% 
+  column_to_rownames(var = "Mass") %>%
+  t()
+
+metadata_DD <- metadata %>% filter(Phase == "Treatment")
+
+set.seed(111) #scale x to presence/absence (0/1) with bray-curtis dissimilarity
+dist_matrix_drydown <- vegdist(decostand(matrix_drydown, "pa"), method = "bray")
+
+set.seed(999)
+permanova_drydown <- adonis2(dist_matrix_drydown ~ Treatment+Days_after_trt+Treatment*Days_after_trt,
+                             data=metadata_DD,
+                             permutations=999,
+                             method="bray")
+view(permanova_drydown)
+
+
+
+
+##recovery phase
+matrix_recovery.file = read_excel("~/Desktop/R /N-exudation-methods/N_alldata.xlsx", 
+    sheet = "matrix_recovery")
+
+matrix_recovery <- matrix_recovery.file %>%
+  column_to_rownames(var = "Mass") %>%
+  t()
+
+metadata_recovery <- metadata %>% filter(Phase == "Recovery")
+
+set.seed(321) #scale x to presence/absence (0/1) with bray-curtis dissimilarity
+dist_matrix_recovery <- vegdist(decostand(matrix_recovery, "pa"), method = "bray")
+
+set.seed(789)
+permanova_recovery <- adonis2(dist_matrix_recovery ~ Treatment+Days_after_trt+Treatment*Days_after_trt,
+                             data=metadata_recovery,
+                             permutations=999,
+                             method="bray")
+view(permanova_recovery)
+
+```
+
+
+Creating FT-ICR output in long format
+```{r}
+df <- read_excel("N_alldata.xlsx", sheet = "Report_processed_all")
+
+df_longer <- df %>%
+  filter(N > 0) %>%
+  pivot_longer(metadata$SampleID, names_to = 'SampleID', values_to = 'NormIntensity') %>% 
+  left_join(metadata, by = 'SampleID')
+df_longer <- df_longer %>% mutate(NormBinary = case_when(NormIntensity != 0 ~ 1)) %>%
+                           mutate(NormBinary = ifelse(is.na(NormBinary), 0, NormBinary)) %>%
+                           na.omit()
+
+df_longer$Phase <- factor(df_longer$Phase, levels=c("Baseline", "Treatment", "Recovery"))
+                      
+
+df_longer_control <- df_longer %>% filter(Treatment == "Control")
+df_longer_drought <- df_longer %>% filter(Treatment == "Drought")
+
+
+for(i in 2:ncol(df_longer)){
+  df_longer[,i] <- as.factor(as_vector(df_longer[,i])) 
+}
+
+df_longer
+
+```
+
+Sample counts and elemental/N metabolite counts
+```{r}
+
+df_all <- df %>%
+  pivot_longer(metadata$SampleID, names_to = 'SampleID', values_to = 'NormIntensity') %>% 
+  left_join(metadata, by = 'SampleID') %>%
+  filter(!(SampleID == "LE078"))
+df_all <- df_all %>% mutate(NormBinary = case_when(NormIntensity != 0 ~ 1)) %>%
+                           mutate(NormBinary = ifelse(is.na(NormBinary), 0, NormBinary)) %>%
+                           filter(!(NormBinary == 0))
+
+df_all$Phase <- factor(df_all$Phase, levels = c("Baseline", "Treatment", "Recovery"))
+
+df_all_intensity <- df %>%
+  pivot_longer(metadata$SampleID, names_to = 'SampleID', values_to = 'NormIntensity') %>% 
+  left_join(metadata, by = 'SampleID') %>%
+  filter(!(SampleID == "LE078"))
+df_all_intensity <- df_all %>%
+                           mutate(NormBinary = ifelse(is.na(NormBinary), 0, NormBinary)) %>%
+                           filter(!(NormBinary == 0))
+
+
+
+sample_count <- df_all %>%
+  group_by(SampleID) %>%
+  summarise(Sample_counts = sum(NormBinary))
+
+sample_N_counts <- df_all %>%
+  filter(N > 0) %>%
+  group_by(SampleID) %>%
+  summarise(N_counts = sum(NormBinary))
+
+
+N.metabolite.counts <- df_all %>%
+  filter(!(NormBinary == 0)) %>%
+  filter(N > 0) %>%
+  group_by(Treatment, Phase) %>%
+  summarise(N.counts = sum(NormBinary))
+
+N.metabolite.counts
+
+C.metabolite.counts <- df_all %>%
+  filter(!(NormBinary == 0)) %>%
+  group_by(Treatment, Phase) %>%
+  summarise(C.counts = sum(NormBinary))
+
+C.metabolite.counts
+
+
+
+
+Metabolite.counts.day <- df_all %>%
+  filter(!(NormBinary == 0)) %>%
+  group_by(Treatment, Days_after_trt) %>%
+  summarise(C.counts = sum(NormBinary))
+Metabolite.counts.day
+
+N.metabolite.counts.day <- df_all %>%
+  filter(!(NormBinary == 0)) %>%
+  filter(N > 0) %>%
+  group_by(Treatment, Days_after_trt) %>%
+  summarise(N.counts = sum(NormBinary))
+N.metabolite.counts.day
+N.metabolite.counts.day2 <- N.metabolite.counts.day[c(3)]
+N.metabolite.counts.day2
+
+Metabolite.counts.day.merge <- cbind(Metabolite.counts.day, N.metabolite.counts.day2)
+Metabolite.counts.day.merge
+
+Metabolite.counts.day.longer <- Metabolite.counts.day.merge %>%
+  pivot_longer(cols = C.counts:N.counts, names_to = c("C.counts", "N.counts"), values_to = "Counts", 
+               names_pattern = "(.*)(.*)")
+
+Metabolite.counts.line <- ggplot(Metabolite.counts.day.longer, aes(Days_after_trt, Counts, group = interaction(C.counts, Treatment), color = Treatment))
+Metabolite.counts.line + 
+  geom_point(aes(shape = Treatment, size = 2)) + 
+  geom_line() + 
+  theme_bw() + 
+  scale_color_brewer(palette = "Dark2")
+
+
+#N metabolites unique to treatment during phases
+
+Metabolite.unique.drought <- df_all %>%
+  filter(!(NormBinary == 0)) %>%
+  filter(N > 0) %>%
+  filter(Phase == "Treatment") %>%
+  filter(Treatment == "Drought")
+
+Metabolite.unique.control <- df_all %>%
+  filter(!(NormBinary == 0)) %>%
+  filter(N > 0) %>%
+  filter(Phase == "Treatment") %>%
+  filter(Treatment == "Control")
+
+#FIND ALL METABOLITES UNIQUE TO DROUGHT 
+Drought.unqiue <- setdiff(Metabolite.unique.drought$Mass, Metabolite.unique.control$Mass)
+Drought.unqiue #349 metabolites
+
+#FIND ALL METABOLITES UNIQUE TO control 
+Control.unqiue <- setdiff(Metabolite.unique.control$Mass, Metabolite.unique.drought$Mass)
+Control.unqiue #172 metabolites
+
+#Find all metabolites shared between treatments
+Shared.metabolites <- intersect(Metabolite.unique.drought$Mass, Metabolite.unique.control$Mass)
+str(Shared.metabolites) #1005
+
+
+#drought unique metabolites expressed by day
+Drought.unique.df <- as.data.frame(Drought.unqiue) 
+colnames(Drought.unique.df) <- c("Mass")
+Drought.unique.df
+
+df.treatment.drought <- df_all %>%
+  filter(Phase == "Treatment") %>%
+  filter(Treatment == "Drought")
+
+Drought.unique.days <- merge(df.treatment.drought, Drought.unique.df, by = c("Mass")) %>%
+  group_by(Mass, Days_after_trt) %>%
+  summarise(Counts.days = sum(NormBinary))
+
+Drought.unique.counts <- merge(df.treatment.drought, Drought.unique.df, by = c("Mass")) %>%
+  group_by(Mass) %>%
+  summarise(Counts.occurance = sum(NormBinary))
+
+#filter unique drought metabolites for occuring in at least 3 days
+Drought.unique.summary <- merge(Drought.unique.days, Drought.unique.counts, by = c("Mass")) %>%
+  filter(Counts.days > 2)
+Drought.unique.summary
+
+
+#making venn diagram for unique drought metabolites
+grid.newpage()                                        
+
+    draw.pairwise.venn(area1=349+1005, area2=172+1005,cross.area=1005,
+                   category=c("Drought","Control"),fill=c("Blue","Yellow"))
+
+#count of molecules with 1 N
+N1.molecules.counts <- df_all %>%
+  filter(!(NormBinary == 0)) %>%
+  filter(N == 1) %>%
+  group_by(Treatment, Phase, SampleID) %>%
+  summarise(N1.counts = sum(NormBinary))
+            
+N1.molecules.counts.stat <- N1.molecules.counts %>%
+  group_by(Treatment, Phase) %>%
+  summarise(N1.counts.mean = mean(N1.counts), 
+            N1.counts.sd = sd(N1.counts))
+N1.molecules.counts.stat
+
+
+N2.molecules.counts <- df_all %>%
+  filter(!(NormBinary == 0)) %>%
+  filter(N == 2) %>%
+  group_by(Treatment, Phase, SampleID) %>%
+  summarise(N2.counts = sum(NormBinary))
+            
+N2.molecules.counts.stat <- N2.molecules.counts %>%
+  group_by(Treatment, Phase) %>%
+  summarise(N2.counts.mean = mean(N2.counts), 
+            N2.counts.sd = sd(N2.counts))
+N2.molecules.counts.stat
+
+N3.molecules.counts <- df_all %>%
+  filter(!(NormBinary == 0)) %>%
+  filter(N == 3) %>%
+  group_by(Treatment, Phase, SampleID) %>%
+  summarise(N3.counts = sum(NormBinary))
+            
+N3.molecules.counts.stat <- N3.molecules.counts %>%
+  group_by(Treatment, Phase) %>%
+  summarise(N3.counts.mean = mean(N3.counts), 
+            N3.counts.sd = sd(N3.counts))
+N3.molecules.counts.stat
+
+
+#molecule counts barplot
+N1.barplot <- ggplot(N1.molecules.counts.stat, aes(Phase, N1.counts.mean, fill = Treatment))
+
+N1.barplot +
+  geom_col(position = position_dodge(), color = "black") + 
+  geom_errorbar(aes(ymin = N1.counts.mean - N1.counts.sd, ymax = N1.counts.mean + N1.counts.sd), position = position_dodge2(width = 0.5, padding = 0.5)) +
+  theme_bw() + 
+  scale_fill_brewer(palette = "Dark2") +
+  labs(x = "Experimental phase", y = "Metabolite counts with 1 N") + 
+  scale_y_continuous(n.breaks = 7) + 
+  theme(axis.text = element_text(face="bold")) + 
+  theme(axis.text=element_text(size=12))
+
+
+
+N2.barplot <- ggplot(N2.molecules.counts.stat, aes(Phase, N2.counts.mean, fill = Treatment))
+
+N2.barplot +
+  geom_col(position = position_dodge(), color = "black") + 
+  geom_errorbar(aes(ymin = N2.counts.mean - N2.counts.sd, ymax = N2.counts.mean + N2.counts.sd), position = position_dodge2(width = 0.5, padding = 0.5)) +
+  theme_bw() + 
+  scale_fill_brewer(palette = "Dark2") +
+  labs(x = "Experimental phase", y = "Metabolite counts with 2 N") + 
+  scale_y_continuous(n.breaks = 7) + 
+  theme(axis.text = element_text(face="bold")) + 
+  theme(axis.text=element_text(size=12))
+
+
+
+
+N3.barplot <- ggplot(N3.molecules.counts.stat, aes(Phase, N3.counts.mean, fill = Treatment))
+
+N3.barplot +
+  geom_col(position = position_dodge(), color = "black") + 
+  geom_errorbar(aes(ymin = N3.counts.mean - N3.counts.sd, ymax = N3.counts.mean + N3.counts.sd), position = position_dodge2(width = 0.5, padding = 0.5)) +
+  theme_bw() + 
+  scale_fill_brewer(palette = "Dark2") +
+  labs(x = "Experimental phase", y = "Metabolite counts with 3 N") + 
+  scale_y_continuous(n.breaks = 7) + 
+  theme(axis.text = element_text(face="bold")) + 
+  theme(axis.text=element_text(size=12))
+
+
+
+
+
+#relative abundance response ratio
+RA <- read_excel("~/Desktop/R /N-exudation-methods/N_alldata.xlsx", 
+           sheet = "Peaks")
+
+RARR.summary <- RA %>%
+  group_by(Days_after_trt, Treatment) %>%
+  summarise(Average = mean(RA)) %>% 
+  pivot_wider(names_from = Treatment, values_from = Average) %>%
+  mutate(RARR = ((Drought - Control)/Drought)*100) 
+RARR.summary
+
+RARR.summary$Days_after_trt <- as.factor(RARR.summary$Days_after_trt)
+  
+RARR.barplot <- ggplot(RARR.summary, aes(Days_after_trt, RARR))
+RARR.barplot + 
+  geom_col(fill = "deepskyblue3", color = "black") + 
+  theme_bw() + 
+  scale_y_continuous(n.breaks = 8) + 
+  theme(axis.text = element_text(face="bold")) + 
+  theme(axis.text=element_text(size=12))
+
+
+```
+
+
+
+Compound classes of N metabolome
+```{r}
+compound_class <- df_longer %>%
+  filter(NormBinary > 0) %>%
+  filter(!(Phase == "Baseline")) %>%
+  group_by(Phase, Treatment, Class) %>%
+  summarise(Class.count = n())
+
+compound_class$Phase <- factor(compound_class$Phase, levels=c("Treatment", "Recovery"))
+
+compound_class.barplot.counts <- ggplot(compound_class, aes(x = Treatment, y = Class.count, fill = Class))
+  
+compound_class.barplot.counts +
+  geom_col(color = "black") + 
+  facet_grid(cols = vars(Phase)) + 
+  theme_bw() +
+  scale_fill_brewer(palette = "Blues") +
+  #scale_fill_manual(values= wes_palette("Rushmore1")) +
+  labs(x = "Treatment", y = "Counts", fill = "Compound class") + 
+  scale_y_continuous(n.breaks = 12) + 
+  theme(strip.text = element_text(size=12, face = "bold"),
+        legend.text = element_text(size=12, face = "bold"), 
+        legend.title = element_text(size=12, face = "bold"), 
+        axis.text = element_text(size=12, face="bold"), 
+        axis.title = element_text(size=12, face = "bold"))
+
+
+compound_class.barplot.proportions <- ggplot(compound_class, aes(x = Treatment, y = Class.count, fill = Class))
+  
+compound_class.barplot.proportions +
+  geom_col(position = "fill",color = "black") + 
+  facet_grid(cols = vars(Phase)) + 
+  theme_bw() +
+  scale_fill_brewer(palette = "Blues") +
+  #scale_fill_manual(values= wes_palette("Rushmore1")) +
+  labs(x = "Treatment", y = "Proportion", fill = "Compound class") + 
+  scale_y_continuous(n.breaks = 12) + 
+  theme(strip.text = element_text(size=12, face = "bold"),
+        legend.text = element_text(size=12, face = "bold"), 
+        legend.title = element_text(size=12, face = "bold"), 
+        axis.text = element_text(size=12, face="bold"), 
+        axis.title = element_text(size=12, face = "bold"))
+
+
+
+
+
+compound_class.stats <- df_longer %>%
+  filter(NormBinary > 0) %>%
+  filter(!(Phase == "Baseline")) %>%
+  group_by(SampleID, Phase, Treatment, Class) %>%
+  summarise(Class.count = n())
+
+
+compound_class.stats.1 <- compound_class.stats %>%
+  group_by(SampleID) %>%
+  summarise(Sample.count = sum(Class.count))
+
+#there are no significances of the entire N metabolome by compound class
+compound_class.stats.2 <- merge(compound_class.stats, compound_class.stats.1, by = "SampleID") %>%
+  mutate(Proportion = (Class.count/Sample.count)*100) %>%
+  group_by(Phase, Class) %>%
+  t_test(Proportion ~ Treatment) %>%
+  adjust_pvalue(method = "BH") %>%
+  add_significance()
+
+
+#compound classes unique to each treatment
+Metabolite.unique.drought <- df_all %>%
+  filter(!(NormBinary == 0)) %>%
+  filter(N > 0) %>%
+  filter(Phase == "Treatment") %>%
+  filter(Treatment == "Drought")
+
+Metabolite.unique.control <- df_all %>%
+  filter(!(NormBinary == 0)) %>%
+  filter(N > 0) %>%
+  filter(Phase == "Treatment") %>%
+  filter(Treatment == "Control")
+  
+
+Drought.unqiue.1 = data.frame(Drought.unqiue)
+names(Drought.unqiue.1) = c("Mass") 
+
+Drought.unique.cc <- merge(Drought.unqiue.1, Metabolite.unique.drought, by = "Mass") %>%
+  group_by(SampleID, Class) %>%
+  summarise(Class.count = n())
+Drought.unique.cc
+
+Drought.unique.cc.total <- Drought.unique.cc %>%
+  summarise(Sample.count = sum(Class.count))
+
+Drought.unique.cc.proportions <- merge(Drought.unique.cc, Drought.unique.cc.total, by = "SampleID") %>%
+  group_by(Class) %>%
+  mutate(Proportion = (Class.count/Sample.count))
+Drought.unique.cc.proportions
+
+
+
+Control.unqiue.1 = data.frame(Control.unqiue)
+names(Control.unqiue.1) = c("Mass") 
+
+Control.unique.cc <- merge(Control.unqiue.1, Metabolite.unique.control, by = "Mass") %>%
+  group_by(SampleID, Class) %>%
+  summarise(Class.count = n())
+Control.unique.cc
+
+Control.unique.cc.total <- Control.unique.cc %>%
+  summarise(Sample.count = sum(Class.count))
+
+sum(Control.unique.cc.total$Sample.count)
+
+Control.unique.cc.proportions <- merge(Control.unique.cc, Control.unique.cc.total, by = "SampleID") %>%
+  group_by(Class) %>%
+  mutate(Proportion = (Class.count/Sample.count))
+Control.unique.cc.proportions
+
+
+Unique.cc.proportions.merge <- rbind(Drought.unique.cc.proportions, Control.unique.cc.proportions) 
+
+Unique.cc.proportions.stats <- merge(Unique.cc.proportions.merge, metadata, by = "SampleID") %>%
+  group_by(Class) %>%
+  wilcox_test(Proportion ~ Treatment) %>%
+  adjust_pvalue(method = "BH") %>%
+  add_significance()
+  
+
+
+Unique.cc.proportions.merge.plot <- merge(Unique.cc.proportions.merge, metadata, by = "SampleID") %>%
+  group_by(Treatment, Class) %>% 
+  summarise(Avg.proportion = mean(Proportion))
+
+
+Unique.cc.barplot <- ggplot(Unique.cc.proportions.merge.plot, aes(x = Treatment, y = Avg.proportion, fill = Class))
+  
+Unique.cc.barplot +
+  geom_col(position = "fill", color = "black") + 
+  theme_bw() +
+  scale_fill_brewer(palette = "Blues") +
+  #scale_fill_manual(values= wes_palette("Rushmore1")) +
+  labs(x = "Treatment", y = "Proportion", fill = "Compound class") + 
+  scale_y_continuous(n.breaks = 12) + 
+  theme(strip.text = element_text(size=12, face = "bold"),
+        legend.text = element_text(size=12, face = "bold"), 
+        legend.title = element_text(size=12, face = "bold"), 
+        axis.text = element_text(size=12, face="bold"), 
+        axis.title = element_text(size=12, face = "bold"))
+
+
+
+```
+
+
+
+
+Molecular mass distribution plot and statistical tests; Kolmogrov-Smirnov two-sample test
+```{r}
+###coorelation plot between masses and presence of peaks in samples during water-deficit 
+df_masses <- df_longer %>%
+  filter(NormBinary != 0)
+
+df_longer <- df_longer[,-c(2:9)]
+df_longer <- df_longer[,-c(4:6)]
+
+Masses_density <- ggplot(df_masses, aes(y=Mass, after_stat(count), color=Treatment, fill=Treatment, group = Treatment))
+
+Masses_density + 
+  #geom_histogram(binwidth = 25, position="dodge") +
+  geom_density(alpha=0.3) + 
+  theme_bw() + 
+  facet_grid(cols = vars(Phase), rows = vars(MW), scales = "free_y") + 
+  scale_color_brewer(palette = "Dark2") +
+  scale_fill_brewer(palette = "Dark2")
+
+
+
+#Kolmogrov-Smirnov testing if the treatment distributions are different 
+#baseline (day 0)
+masses_distribution_baseline.LMW.control <- df_masses %>% 
+  filter(Phase == "Baseline", Treatment == "Control", MW == "Low m/z")
+masses_distribution_baseline.LMW.control
+
+masses_distribution_baseline.LMW.drought <- df_masses %>% 
+  filter(Phase == "Baseline", Treatment == "Drought", MW == "Low m/z")
+masses_distribution_baseline.LMW.drought
+
+ks.test(masses_distribution_baseline.LMW.control$Mass, masses_distribution_baseline.LMW.drought$Mass)
+#D = 0.080098, p-value = 0.183
+
+
+
+masses_distribution_baseline.HMW.control <- df_masses %>% 
+  filter(Phase == "Baseline", Treatment == "Control", MW == "High m/z")
+masses_distribution_baseline.HMW.control
+
+masses_distribution_baseline.HMW.drought <- df_masses %>% 
+  filter(Phase == "Baseline", Treatment == "Drought", MW == "High m/z")
+masses_distribution_baseline.HMW.drought
+
+ks.test(masses_distribution_baseline.HMW.control$Mass, masses_distribution_baseline.HMW.drought$Mass)
+#D = 0.071695, p-value = 0.9485
+
+
+
+
+#Treatment phase (Days 2-11)
+masses_distribution_treatment.LMW.control <- df_masses %>% 
+  filter(Phase == "Treatment", Treatment == "Control", MW == "Low m/z") 
+masses_distribution_treatment.LMW.control
+
+masses_distribution_treatment.LMW.drought <- df_masses %>% 
+  filter(Phase == "Treatment", Treatment == "Drought", MW == "Low m/z")
+masses_distribution_treatment.LMW.drought
+
+ks.test(masses_distribution_treatment.LMW.drought$Mass, masses_distribution_treatment.LMW.control$Mass)
+#D = 0.040956, p-value = 0.007628
+
+
+masses_distribution_treatment.HMW.control <- df_masses %>% 
+  filter(Phase == "Treatment", Treatment == "Control", MW == "High m/z") 
+masses_distribution_treatment.HMW.control
+
+masses_distribution_treatment.HMW.drought <- df_masses %>% 
+  filter(Phase == "Treatment", Treatment == "Drought", MW == "High m/z")
+masses_distribution_treatment.HMW.drought
+
+ks.test(masses_distribution_treatment.HMW.drought$Mass, masses_distribution_treatment.HMW.control$Mass)
+#D = 0.027561, p-value = 0.9743
+
+
+
+
+#Recovery phase (Day 14-18)
+masses_distribution_recovery.LMW.control <- df_masses %>% 
+  filter(Phase == "Recovery", Treatment == "Control", MW == "Low m/z") 
+masses_distribution_recovery.LMW.control
+
+masses_distribution_recovery.LMW.drought <- df_masses %>% 
+  filter(Phase == "Recovery", Treatment == "Drought", MW == "Low m/z")
+masses_distribution_recovery.LMW.drought
+
+ks.test(masses_distribution_recovery.LMW.drought$Mass, masses_distribution_recovery.LMW.control$Mass)
+#D = 0.045757, p-value = 0.05018
+
+
+
+masses_distribution_recovery.HMW.control <- df_masses %>% 
+  filter(Phase == "Recovery", Treatment == "Control", MW == "High m/z") 
+masses_distribution_recovery.HMW.control
+
+masses_distribution_recovery.HMW.drought <- df_masses %>% 
+  filter(Phase == "Recovery", Treatment == "Drought", MW == "High m/z")
+masses_distribution_recovery.HMW.drought
+
+ks.test(masses_distribution_recovery.HMW.drought$Mass, masses_distribution_recovery.HMW.control$Mass)
+#D = 0.061142, p-value = 0.3702
+
+
+```
+
+
+
+
+
+
+
